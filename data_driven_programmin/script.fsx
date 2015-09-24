@@ -4,24 +4,48 @@
 
 // ----------------------------------------------------------------------------
 //Initialize charting libraries
-#r "FSharp.Data.dll"
+#r @"Q:\umezawa\dev\git\sample_fsharp\packages\FSharp.Data.2.2.5\lib\net40\FSharp.Data.dll"
+#load @"Q:\umezawa\dev\git\sample_fsharp\packages\FSharp.Charting.0.90.12\FSharp.Charting.fsx"
+open FSharp.Data
+open FSharp.Charting
 
-open Samples.Charting.DojoChart
+let data = WorldBankData.GetDataContext()
 
-//Load World Bank Type Provider
-#r "Samples.WorldBank.dll"
-
-let data = Samples.WorldBank.GetDataContext()
-
-data.Countries.``United States``.Indicators.``Population (Total)``
+data.Countries.``United Kingdom``
+    .Indicators.``School enrollment, tertiary (% gross)``
 |> Chart.Line
 
+// asyncronic access
+type WorldBank = WorldBankDataProvider<"World Development Indicators", Asynchronous=true>
+WorldBank.GetDataContext()
 
+let wb = WorldBank.GetDataContext()
 
+// 対象とする国のリストを作成
+let countries = 
+ [| wb.Countries.``Arab World``
+    wb.Countries.``European Union``
+    wb.Countries.Australia
+    wb.Countries.Brazil
+    wb.Countries.Canada
+    wb.Countries.Chile
+    wb.Countries.``Czech Republic``
+    wb.Countries.Denmark
+    wb.Countries.France
+    wb.Countries.Greece
+    wb.Countries.``Low income``
+    wb.Countries.``High income``
+    wb.Countries.``United Kingdom``
+    wb.Countries.``United States`` |]
+    
+[ for c in countries ->
+    c.Indicators.``School enrollment, tertiary (% gross)`` ]
+|> Async.Parallel
+|> Async.RunSynchronously
+|> Array.map Chart.Line
+|> Chart.Combine
 
-
-
-
+(*
 // Section 13.1 Asynchronous workflows
 
 // Listing 13.1 Writing code using asynchronous workflows 
@@ -452,3 +476,5 @@ for year, index in [| "1990", 0; "2000", 1; "2005", 2 |] do
   let values = seq { for _, ar in stats -> ar.[index] / 1000000.0 }
   printfn "%A" (values |> List.of_seq)
   chart.Series.Add(series year values)
+
+*)
