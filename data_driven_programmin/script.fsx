@@ -2,50 +2,6 @@
 // Functional Programming in .NET - Chapter 13
 // --------------------------------------------------------------------------
 
-// ----------------------------------------------------------------------------
-//Initialize charting libraries
-#r @"Q:\umezawa\dev\git\sample_fsharp\packages\FSharp.Data.2.2.5\lib\net40\FSharp.Data.dll"
-#load @"Q:\umezawa\dev\git\sample_fsharp\packages\FSharp.Charting.0.90.12\FSharp.Charting.fsx"
-open FSharp.Data
-open FSharp.Charting
-
-let data = WorldBankData.GetDataContext()
-
-data.Countries.``United Kingdom``
-    .Indicators.``School enrollment, tertiary (% gross)``
-|> Chart.Line
-
-// asyncronic access
-type WorldBank = WorldBankDataProvider<"World Development Indicators", Asynchronous=true>
-WorldBank.GetDataContext()
-
-let wb = WorldBank.GetDataContext()
-
-// 対象とする国のリストを作成
-let countries = 
- [| wb.Countries.``Arab World``
-    wb.Countries.``European Union``
-    wb.Countries.Australia
-    wb.Countries.Brazil
-    wb.Countries.Canada
-    wb.Countries.Chile
-    wb.Countries.``Czech Republic``
-    wb.Countries.Denmark
-    wb.Countries.France
-    wb.Countries.Greece
-    wb.Countries.``Low income``
-    wb.Countries.``High income``
-    wb.Countries.``United Kingdom``
-    wb.Countries.``United States`` |]
-    
-[ for c in countries ->
-    c.Indicators.``School enrollment, tertiary (% gross)`` ]
-|> Async.Parallel
-|> Async.RunSynchronously
-|> Array.map Chart.Line
-|> Chart.Combine
-
-(*
 // Section 13.1 Asynchronous workflows
 
 // Listing 13.1 Writing code using asynchronous workflows 
@@ -115,61 +71,90 @@ Async.RunSynchronously(async {
    printfn "Finished!"
 } )
 
+// Section 13.2 world bank
 
 // ----------------------------------------------------------------------------
-// Section 13.2 Connecting to the World Bank
+//Initialize charting libraries
+#r @"Q:\umezawa\dev\git\sample_fsharp\packages\FSharp.Data.2.2.5\lib\net40\FSharp.Data.dll"
+#load @"Q:\umezawa\dev\git\sample_fsharp\packages\FSharp.Charting.0.90.12\FSharp.Charting.fsx"
+open FSharp.Data
+open FSharp.Charting
 
-// Listing 13.5 Building the request URL
-open System.Web
+let data = WorldBankData.GetDataContext()
 
-// Please register at http://developer.worldbank.org/member/register to get the key
-let worldBankKey = "hq8byg8k7t2fxc6hp7jmbx26"
+data.Countries.``United Kingdom``
+    .Indicators.``School enrollment, tertiary (% gross)``
+|> Chart.Line
 
-let worldBankUrl(functions, props) = seq { 
-  // Same for all requests
-  yield "http://open.worldbank.org"
-  // Generate path to the function
-  for item in functions do
-    yield "/" + HttpUtility.UrlEncode(item:string)
-  yield "?per_page=100"
-  yield "&api_key=" + worldBankKey
-  // Additional properties specified by the user
-  for key, value in props do
-     yield "&" + key + "=" + HttpUtility.UrlEncode(value:string) } |> String.concat ""
+// asyncronic access
+type WorldBank = WorldBankDataProvider<"World Development Indicators", Asynchronous=true>
+WorldBank.GetDataContext()
+
+let wb = WorldBank.GetDataContext()
+
+// 対象とする国のリストを作成
+let countries = 
+ [| wb.Countries.``Arab World``
+    wb.Countries.``European Union``
+    wb.Countries.Australia
+    wb.Countries.Brazil
+    wb.Countries.Canada
+    wb.Countries.Chile
+    wb.Countries.``Czech Republic``
+    wb.Countries.Denmark
+    wb.Countries.France
+    wb.Countries.Greece
+    wb.Countries.``Low income``
+    wb.Countries.``High income``
+    wb.Countries.``United Kingdom``
+    wb.Countries.``United States`` |]
+
+[ for c in countries ->
+    c.Indicators.``School enrollment, tertiary (% gross)`` ]
+|> Async.Parallel
+|> Async.RunSynchronously
+|> Array.map Chart.Line
+|> Chart.Combine
+
+//Plot birth rate for USA
+//Note: run the two plots separately to see their results
+data.Countries.``United States``.Indicators.
+  ``Birth rate, crude (per 1,000 people)``
+|> Chart.Line
+
+//Plot maternal mortality ratio for United Kingdom
+//Note: run the two plots separately to see their results
+data.Countries.``United Kingdom``.Indicators.
+  ``Maternal mortality ratio (modeled estimate, per 100,000 live births)``
+|> Chart.Line
+
+//Set up list of countries to compare
+let countries = 
+  [ data.Countries.``United States``; 
+    data.Countries.India;
+    data.Countries.``Burkina Faso``; 
+    data.Countries.Niger; ]
 
 
-// Listing 13.6 Testing the World Bank data service
+//Plot birth rates of selected countries
+//Note: run the two plots separately to see their results
+Chart.Combine([ for country in countries ->
+                    let data = country.Indicators.``Birth rate, crude (per 1,000 people)``
+                    Chart.Line(data, Name=country.Name) ])
+     .WithLegend()
 
-// Build request URL with the specified properties
-let url = worldBankUrl(["countries"], ["region", "NA"]);;
-// Download the page as a string
-Async.RunSynchronously(downloadUrl(url));;
+//Plot maternal mortality rates of selected countries
+//Note: run the two plots separately to see their results
+Chart.Combine([ for country in countries ->
+                    let data = country.Indicators.``Maternal mortality ratio (national estimate, per 100,000 live births)``
+                    Chart.Line(data, Name=country.Name) ])
+     .WithLegend()
 
 
-// Listing 13.7 Running the web request repeatedly
 
-let worldBankDownload(props) =  
-  // Construct the request URL
-  let url = worldBankUrl(props)
-  // Recursive asynchronous function
-  let rec loop(n) = async {
-    try
-      // Run the actual download asynchronously
-      return! downloadUrl(url)
-    // Catch exception when we want to retry
-    with e when n > 0 ->
-      // Delay the workflow without blocking
-      printfn "Failed, retrying (%d): %A" n props
-      do! Async.Sleep(500.0)
-      // Recursively retry the request
-      return! loop(n-1) }
-  // Return the recursive workflow
-  loop(20)        
 
-// Try the function interactively
 
-let props = ["countries"], ["region", "NA"]
-Async.RunSynchronously(worldBankDownload(props))
+(*
 
 // ----------------------------------------------------------------------------
 // Section 13.3 Exploring and obtaining the data
