@@ -40,8 +40,8 @@ let (|Op|_|) (x : Expression) =
 
 let (|CommutativeOp|_|) (x : Expression) =
     match x with
-    | Add(e1, e2) -> Some(Add, e1, e2)
-    | Mul(e1, e2) -> Some(Mul, e1, e2)
+    | Add(e1, e2) -> Some(Add, "Add", e1, e2)
+    | Mul(e1, e2) -> Some(Mul, "Mul", e1, e2)
     | _ -> None
 
 let (|Func|_|) (x : Expression) =
@@ -232,46 +232,43 @@ let Format e : string =
 //-------------------------------------------------------------------------------------------------
 // Sort
 //-------------------------------------------------------------------------------------------------
-let rec SortImpl isSorted x = 
+let rec SortImpl x = 
     match x with 
-    | CommutativeOp(op, e1, e2) when LargerThan e1 e2 ->
-         op(e2, e1) |> SortImpl true
+    | CommutativeOp(op, s, e1, e2) when LargerThan e1 e2 ->
+         op(e2, e1) |> SortImpl
     // add
-    | Add(e1, Add(e2, e3)) when LargerThan e1 e2 ->
-         Add(e2, Add(e1, e3)) |> SortImpl true
-    | Add(Add(e1, e2), e3) -> 
-        Add(e1, Add(e2, e3)) |> SortImpl true
-    | Add(Add(e1, e2), Add(e3, e4)) when LargerThan e2 e3 -> 
-        Add(Add(e1, e3), Add(e2, e4)) |> SortImpl true
+    | CommutativeOp(op1, s1, e1, CommutativeOp(op2, s2, e2, e3)) 
+        when LargerThan e1 e2 && s1 = s2 ->
+        op1(e2, op1(e1, e3)) |> SortImpl
+    | CommutativeOp(op1, s1, CommutativeOp(op2, s2, e1, e2), e3) 
+        when s1 = s2 -> 
+        op1(e1, op1(e2, e3)) |> SortImpl
+    | CommutativeOp(op, s, CommutativeOp(op1, s1, e1, e2), CommutativeOp(op2, s2, e3, e4)) 
+        when LargerThan e2 e3 && s = s1 && s = s2 -> 
+        op(op(e1, e3), op(e2, e4)) |> SortImpl
     // subtract
-    | Sub(Add(e1, e2), e3) when LargerThan e2 e3 -> Add(Sub(e1, e3), e2) |> SortImpl true
-    // multiply
-    | Mul(e1, Mul(e2, e3)) when LargerThan e1 e2 -> Mul(e2, Mul(e1, e3))|> SortImpl true
-    | Mul(Mul(e1, e2), e3) -> Mul(e1, Mul(e2, e3)) |> SortImpl true
-    | Mul(Mul(e1, e2), Mul(e3, e4)) when LargerThan e2 e3 -> Mul(Mul(e1, e3), Mul(e2, e4))|> SortImpl true
+    | Sub(Add(e1, e2), e3) when LargerThan e2 e3 -> Add(Sub(e1, e3), e2) |> SortImpl
     // binary operator
-    | Op(op, e1, e2) -> tryToCall SortImpl isSorted op e1 e2
+    | Op(op, e1, e2) -> tryToCall1 SortImpl x
     // other
-    | _ -> (isSorted, x)
+    | _ -> x
 
 
-let Sort x = 
-    let (isSorted, e) = SortImpl false x in e
+let Sort x = SortImpl x 
 
 
 //-------------------------------------------------------------------------------------------------
 // Expand
 //-------------------------------------------------------------------------------------------------
-let rec ExpandImpl isExpanded x = 
+let rec ExpandImpl x = 
     match x with
-    | Mul(e1, Add(e2, e3)) -> Add(e1 * e2, e1 * e3) |> Sort |> ExpandImpl true
-    | Mul(e1, Sub(e2, e3)) -> Sub(e1 * e2, e1 * e3) |> Sort |> ExpandImpl true
-    | Sub(e1, Add(e2, e3)) -> e1 - e2 - e3  |> Sort |> ExpandImpl true
-    | Op(op, e1, e2) -> tryToCall ExpandImpl isExpanded op e1 e2
-    | _ -> (isExpanded, x)
+    | Mul(e1, Add(e2, e3)) -> Add(e1 * e2, e1 * e3) |> Sort |> ExpandImpl
+    | Mul(e1, Sub(e2, e3)) -> Sub(e1 * e2, e1 * e3) |> Sort |> ExpandImpl
+    | Sub(e1, Add(e2, e3)) -> e1 - e2 - e3  |> Sort |> ExpandImpl
+    | Op(op, e1, e2) -> tryToCall1 ExpandImpl x 
+    | _ -> x
 
-let Expand x =
-    let (isExpand, e) = Sort x |> ExpandImpl false in e
+let Expand x = Sort x |> ExpandImpl
 
 //-------------------------------------------------------------------------------------------------
 // SimplifyConstant
