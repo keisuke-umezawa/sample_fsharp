@@ -163,9 +163,9 @@ let getGcd (n : int) (m : int) : int =
     else
         getGcdImpl n m
 
-let addChangeFlag f isModified x =
+let addChangeFlag f x =
     let y = f x
-    (y = x, y)
+    (y <> x, y)
 
 let tryToCall f isModified op e1 e2 =
     let (isModified2, a1) = f false e1
@@ -175,6 +175,16 @@ let tryToCall f isModified op e1 e2 =
     else
         (isModified, op(e1, e2))
         
+let tryToCall1 f e =
+    match e with
+    | Op(op, e1, e2) ->
+        let (isModified2, a1) = addChangeFlag f e1
+        let (isModified1, a2) = addChangeFlag f e2
+        if isModified1 || isModified2 then
+            op(a1, a2) |> f
+        else
+            e
+    | _ -> e
 
 //-------------------------------------------------------------------------------------------------
 // Format
@@ -286,13 +296,7 @@ let SimplifyConstant x =
         | Div(Div(Const(a1), Const(b1)), Div(Const(a2), Const(b2))) ->
             Const(a1 * b2) / Const(b1 * a2)
         | Neg(c) -> -1.0 * (SimplifyConstantImpl c)
-        | Op(op, c1, c2) ->
-            let e1 = SimplifyConstantImpl c1 in
-            let e2 = SimplifyConstantImpl c2 in
-            if e1 <> c1 || e2 <> c2 then
-                op(e1, e2) |> SimplifyConstantImpl
-            else
-                op(e1, e2)
+        | Op(op, c1, c2) -> tryToCall1 SimplifyConstantImpl x
         | _ -> x
     let rec Reduce x =
         match x with
@@ -327,13 +331,6 @@ let Simplify x =
         match x with
         // constant
         | Constant(c) -> c |> SimplifyConstant
-//        | Add(Const(n1), Const(n2)) -> Const(n1 + n2)
-//        | Sub(Const(n1), Const(n2)) -> Const(n1 - n2)
-//        | Mul(Const(n1), Const(n2)) -> Const(n1 * n2)
-//        | Mul(Const(n1), Div(Const(n2), Const(n3))) -> Const(n1 * n2) / Const(n3)
-//        | Div(Const(n1), Const(1.)) -> Const(n1)
-//        | Div(Const(n1), Const(n2)) -> x
-//        | Neg(Const(n)) -> Const(-1.0 * n)
         // neg
         | Neg(Neg(e)) -> e |> Expand |> SimplifyImpl true
         // add
