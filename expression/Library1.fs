@@ -167,15 +167,7 @@ let addChangeFlag f x =
     let y = f x
     (y <> x, y)
 
-let tryToCall f isModified op e1 e2 =
-    let (isModified2, a1) = f false e1
-    let (isModified1, a2) = f false e2
-    if isModified1 || isModified2 then
-        op(a1, a2) |> f true
-    else
-        (isModified, op(e1, e2))
-        
-let tryToCall1 f e =
+let tryToCall f e =
     match e with
     | Op(op, e1, e2) ->
         let (isModified2, a1) = addChangeFlag f e1
@@ -249,7 +241,7 @@ let rec SortImpl x =
     // subtract
     | Sub(Add(e1, e2), e3) when LargerThan e2 e3 -> Add(Sub(e1, e3), e2) |> SortImpl
     // binary operator
-    | Op(op, e1, e2) -> tryToCall1 SortImpl x
+    | Op(op, e1, e2) -> tryToCall SortImpl x
     // other
     | _ -> x
 
@@ -265,7 +257,7 @@ let rec ExpandImpl x =
     | Mul(e1, Add(e2, e3)) -> Add(e1 * e2, e1 * e3) |> Sort |> ExpandImpl
     | Mul(e1, Sub(e2, e3)) -> Sub(e1 * e2, e1 * e3) |> Sort |> ExpandImpl
     | Sub(e1, Add(e2, e3)) -> e1 - e2 - e3  |> Sort |> ExpandImpl
-    | Op(op, e1, e2) -> tryToCall1 ExpandImpl x 
+    | Op(op, e1, e2) -> tryToCall ExpandImpl x 
     | _ -> x
 
 let Expand x = Sort x |> ExpandImpl
@@ -293,7 +285,7 @@ let SimplifyConstant x =
         | Div(Div(Const(a1), Const(b1)), Div(Const(a2), Const(b2))) ->
             Const(a1 * b2) / Const(b1 * a2)
         | Neg(c) -> -1.0 * (SimplifyConstantImpl c)
-        | Op(op, c1, c2) -> tryToCall1 SimplifyConstantImpl x
+        | Op(op, c1, c2) -> tryToCall SimplifyConstantImpl x
         | _ -> x
     let rec Reduce x =
         match x with
