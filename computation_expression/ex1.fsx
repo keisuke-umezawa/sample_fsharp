@@ -25,6 +25,7 @@ type LoggingBuilder() =
 
     member this.Return(x) =
         x
+
 let logger = new LoggingBuilder()
 
 let loggedWorkflow = 
@@ -35,6 +36,8 @@ let loggedWorkflow =
         let! z = x + y
         return z
         }
+
+
 
 // safe division
 

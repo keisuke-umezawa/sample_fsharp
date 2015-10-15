@@ -1,6 +1,14 @@
 ﻿module expressions
 
-type Expression = 
+
+type Condition =
+    | ConstCondition of bool
+    | Not of Condition
+    | And of Condition * Condition
+    | Or of Condition * Condition
+    | EqualTo of Expression * Expression
+    | MoreThan of Expression * Expression
+and Expression = 
     | Const of float
     | Var of string
     | Neg of Expression
@@ -13,6 +21,8 @@ type Expression =
     | Log of Expression
     | Sin of Expression
     | Cos of Expression
+    | When of Condition * Expression
+    | Until of Condition * Expression
     static member ( ~+ ) x = x
     static member ( ~- ) x = Neg(x)
     static member ( + ) (x, y) = Add(x, y)
@@ -29,13 +39,19 @@ type Expression =
     static member ( / ) (n, y) = Div(Const(n), y)
 
 
-let (|Op|_|) (x : Expression) =
+let (|BinaryOp|_|) (x : Expression) =
     match x with
     | Add(e1, e2) -> Some(Add, e1, e2)
     | Sub(e1, e2) -> Some(Sub, e1, e2)
     | Mul(e1, e2) -> Some(Mul, e1, e2)
     | Div(e1, e2) -> Some(Div, e1, e2)
     | Pow(e1, e2) -> Some(Pow, e1, e2)
+    | _ -> None
+
+let (|BinaryCondition|_|) (c : Condition) =
+    match c with
+    | And(c1, c2) -> Some(And, c1, c2)
+    | Or(c1, c2) -> Some(Or, c1, c2)
     | _ -> None
 
 let (|CommutativeOp|_|) (x : Expression) =
@@ -61,7 +77,7 @@ let (|Linear|_|) (x : Expression) =
 
 let rec (|Constant|_|) (x : Expression) =
     match x with
-    | Op(op, Constant(c1), Constant(c2)) -> Some(x)
+    | BinaryOp(op, Constant(c1), Constant(c2)) -> Some(x)
     | Const(n) -> Some(x)
     | Neg(Constant(c)) -> Some(x)
     | _ -> None
@@ -134,7 +150,7 @@ let Elements x =
     let rec ElementImpl x lst =
         match x with
         | Const(n) -> lst
-        | Op(op, e1, e2) -> ElementImpl e1 (ElementImpl e2 lst)
+        | BinaryOp(op, e1, e2) -> ElementImpl e1 (ElementImpl e2 lst)
         | Func(f, e) -> ElementImpl e lst
         | _ -> x::lst
     Set.toList (set (ElementImpl x []))
@@ -167,16 +183,13 @@ let addChangeFlag f x =
     let y = f x
     (y <> x, y)
 
-let tryToCall f e =
-    match e with
-    | Op(op, e1, e2) ->
-        let (isModified2, a1) = addChangeFlag f e1
-        let (isModified1, a2) = addChangeFlag f e2
-        if isModified1 || isModified2 then
-            op(a1, a2) |> f
-        else
-            e
-    | _ -> e
+let tryToCall f op e1 e2 =
+    let (isModified2, a1) = addChangeFlag f e1
+    let (isModified1, a2) = addChangeFlag f e2
+    if isModified1 || isModified2 then
+        op(a1, a2) |> f
+    else
+        op(e1, e2)
 
 //-------------------------------------------------------------------------------------------------
 // Format
@@ -210,7 +223,7 @@ let Format e : string =
         | Var(s) -> s
         | Const(n) -> sprintf "%f" n
         | Neg(x) -> sprintf "-%s" (FormatImpl "neg" true x)
-        | Op(op, e1, e2) -> 
+        | BinaryOp(op, e1, e2) -> 
             let t = (requireParenthesis x)
             let s = sprintf "%s %s %s" (FormatImpl (OpName x) t e1) (OpName x) (FormatImpl (OpName x) t e2)
             if needParenthesis && higher <> "" && (OpName x) <> higher then
@@ -241,10 +254,23 @@ let rec SortImpl x =
     // subtract
     | Sub(Add(e1, e2), e3) when LargerThan e2 e3 -> Add(Sub(e1, e3), e2) |> SortImpl
     // binary operator
-    | Op(op, e1, e2) -> tryToCall SortImpl x
+    | BinaryOp(op, e1, e2) -> tryToCall SortImpl op e1 e2
     // other
     | _ -> x
 
+let rec SortCondition c =
+    match c with
+    | And(c1, c2) when c1 > c2 -> And(c2, c1) |> SortCondition
+    | And(c, And(c1, c2)) when c > c1 -> And(c1, And(c, c2)) |> SortCondition
+    | And(And(c1, c2), c) when c2 > c -> And(And(c1, c), c2) |> SortCondition
+    | And(And(c1, c2), And(c3, c4)) when c2 > c3 -> And(And(c1, c3), And(c2, c4)) |> SortCondition
+    | Or(c1, c2) when c1 > c2 -> Or(c2, c1) |> SortCondition
+    | Or(c, Or(c1, c2)) when c > c1 -> Or(c1, Or(c, c2)) |> SortCondition
+    | Or(Or(c1, c2), c) when c2 > c -> Or(Or(c1, c), c2) |> SortCondition
+    | Or(Or(c1, c2), Or(c3, c4)) when c2 > c3 -> Or(Or(c1, c3), Or(c2, c4)) |> SortCondition
+    | BinaryCondition(op, c1, c2) -> tryToCall SortCondition op c1 c2
+    | EqualTo(c1, c2) when c1 > c2 -> EqualTo(c2, c1) |> SortCondition
+    | _ -> c
 
 let Sort x = SortImpl x 
 
@@ -257,11 +283,19 @@ let rec ExpandImpl x =
     | Mul(e1, Add(e2, e3)) -> Add(e1 * e2, e1 * e3) |> Sort |> ExpandImpl
     | Mul(e1, Sub(e2, e3)) -> Sub(e1 * e2, e1 * e3) |> Sort |> ExpandImpl
     | Sub(e1, Add(e2, e3)) -> e1 - e2 - e3  |> Sort |> ExpandImpl
-    | Op(op, e1, e2) -> tryToCall ExpandImpl x 
+    | BinaryOp(op, e1, e2) -> tryToCall ExpandImpl op e1 e2
     | _ -> x
 
 let Expand x = Sort x |> ExpandImpl
 
+let rec ExpandCondition c =
+    match c with
+    | Not(And(c1, c2)) -> Or(Not(c1), Not(c2)) |> SortCondition |> ExpandCondition
+    | Not(Or(c1, c2)) -> And(Not(c1), Not(c2)) |> SortCondition |> ExpandCondition
+    | And(c1, c2) -> tryToCall ExpandCondition And c1 c2
+    | Or(c1, c2) -> tryToCall ExpandCondition Or c1 c2
+    | Not(c) when c <> ExpandCondition c-> Not(ExpandCondition c) |> SortCondition |> ExpandCondition
+    | _ -> c
 //-------------------------------------------------------------------------------------------------
 // SimplifyConstant
 //-------------------------------------------------------------------------------------------------
@@ -269,7 +303,7 @@ let SimplifyConstant x =
     let rec ToFraction x = 
         match x with
         | Div(Const(c1), Const(c2)) -> x 
-        | Op(op, c1, c2) ->
+        | BinaryOp(op, c1, c2) ->
             op((ToFraction c1), (ToFraction c2))
         | Const(c) -> x / 1.
         | _ -> x
@@ -285,7 +319,7 @@ let SimplifyConstant x =
         | Div(Div(Const(a1), Const(b1)), Div(Const(a2), Const(b2))) ->
             Const(a1 * b2) / Const(b1 * a2)
         | Neg(c) -> -1.0 * (SimplifyConstantImpl c)
-        | Op(op, c1, c2) -> tryToCall SimplifyConstantImpl x
+        | BinaryOp(op, c1, c2) -> tryToCall SimplifyConstantImpl op c1 c2
         | _ -> x
     let rec Reduce x =
         match x with
@@ -303,9 +337,12 @@ let SimplifyConstant x =
     x |> ToFraction |> SimplifyConstantImpl |> Reduce
 
 //-------------------------------------------------------------------------------------------------
+// SimplifyCondition
+//-------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------
 // Simplify
 //-------------------------------------------------------------------------------------------------
-let Simplify x = 
+let rec Simplify x = 
     let rec SimplifyImpl firstTry x = 
         let ChangeTermOrder op e1 e2 e3 =
             let e12 = op(e1, e2) |> Expand |> SimplifyImpl true in
@@ -348,7 +385,7 @@ let Simplify x =
         | Sub(e1, e2) when e1 = e2 -> Const(0.)
         | Sub(e1, Neg(e2)) -> Add(e1, e2) |> Expand |> SimplifyImpl true
         // binary operator
-        | Op(op, e1, e2) when firstTry -> 
+        | BinaryOp(op, e1, e2) when firstTry -> 
             let e1 = e1 |> Expand |> SimplifyImpl true in
             let e2 = e2 |> Expand |> SimplifyImpl true in
             op(e1, e2) |> Expand |> SimplifyImpl false
@@ -364,6 +401,16 @@ let Simplify x =
         // other
         | _ -> x
     Expand x |> SimplifyImpl true
+and SimplifyCondition (c : Condition)= 
+    match c with
+    | Not(ConstCondition b) -> ConstCondition (not b)
+    | Not(Not(c)) -> c |> SimplifyCondition
+    | And(ConstCondition b1, ConstCondition b2) -> ConstCondition(b1 && b2)
+    | Or(ConstCondition b1, ConstCondition b2) -> ConstCondition(b1 || b2)
+    | EqualTo(e1, e2) when e1 = e2 -> ConstCondition(true)
+    | EqualTo(e1, e2) -> EqualTo(Simplify e1, Simplify e2)
+    | MoreThan(e1, e2) -> MoreThan(Simplify e1, Simplify e2)
+    | _ -> c
 
 //-------------------------------------------------------------------------------------------------
 // differentiate

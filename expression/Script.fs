@@ -13,6 +13,9 @@ let c1 = Const(1.)
 let c2 = Const(2.)
 let c3 = Const(3.)
 
+let ctrue = ConstCondition(true)
+let cfalse = ConstCondition(false)
+let cequal = EqualTo(c1, c2)
 
 [<TestFixture>] 
 type ``expression tests`` ()=
@@ -91,6 +94,36 @@ type ``expression tests`` ()=
    [<Test>] member test.
     ``test case 25`` ()=
            Format(Differentiate(1. / x, x, 1)) |> should equal "-1.000000 * (x ^ -2.000000)"
+   [<Test>] member test.
+    ``test case 26`` ()=
+           And(cfalse, ctrue) |> SortCondition |> should equal (And(cfalse, ctrue))
+   [<Test>] member test.
+    ``test case 27`` ()=
+           And(ctrue, cfalse) |> SortCondition |> should equal (And(cfalse, ctrue))
+   [<Test>] member test.
+    ``test case 28`` ()=
+           ctrue |> should equal ctrue
+   [<Test>] member test.
+    ``test case 29`` ()=
+           And(ctrue, And(cfalse, cfalse)) |> SortCondition |> should equal (And(cfalse, And(cfalse, ctrue)))
+   [<Test>] member test.
+    ``test case 30`` ()=
+           And(And(ctrue, cfalse), And(ctrue, cfalse)) |> SortCondition |> 
+           should equal (And(cfalse, And(cfalse, And(ctrue, ctrue))))
+   [<Test>] member test.
+    ``test case 31`` ()=
+           Not(And(ctrue, cfalse)) |> ExpandCondition |> 
+           should equal (Or(Not(cfalse), Not(ctrue)))
+   [<Test>] member test.
+    ``test case 32`` ()=
+           Not(Not(And(ctrue, cfalse))) |> ExpandCondition |> 
+           should equal (And(Not(Not(cfalse)), Not(Not(ctrue))))
+   [<Test>] member test.
+    ``test case 33`` ()=
+           Not(ctrue) |> SimplifyCondition |> should equal cfalse
+   [<Test>] member test.
+    ``test case 34`` ()=
+           Not(Not(And(ctrue, cfalse))) |> SimplifyCondition |> should equal cfalse
 //Format(Simplify((Const(1.) * x) / Const(2.)))
 //Format(SimplifyConstant(Const(1.) / Const(2.) + Const(3.)))
 //Format(SimplifyConstant(Const(4.) / Const(2.) ))

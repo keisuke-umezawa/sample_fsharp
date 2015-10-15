@@ -63,14 +63,7 @@ printfn "24"
 Format(Differentiate(1. / x, x, 1));;
 //
 //
-//Format(Simplify((Const(1.) * x) / Const(2.)))
-//Format(SimplifyConstant(Const(1.) / Const(2.) + Const(3.)))
-//Format(SimplifyConstant(Const(4.) / Const(2.) ))
-//
-//SimplifyConstant(Const(1.) / Const(2.) + Const(3.))
-//let f e =
-//    match e with
-//    | Constant(c) -> c, Const(1.)
-//    | _ -> Const(1.), e
-//
-//printfn "-- end -- "
+let ctrue = ConstCondition(true)
+let cfalse = ConstCondition(false)
+let cequal = EqualTo(c1, c2)
+Not(Not(And(ctrue, cfalse))) |> ExpandCondition ;;
