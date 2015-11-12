@@ -39,6 +39,15 @@ and Expression =
     static member ( / ) (n, y) = Div(Const(n), y)
 
 
+let (|UnaryOp|_|) (x : Expression) =
+    match x with
+    | Neg(e) -> Some(Neg, e)
+    | Exp(e) -> Some(Exp, e)
+    | Log(e) -> Some(Log, e)
+    | Sin(e) -> Some(Sin, e)
+    | Cos(e) -> Some(Cos, e)
+    | _ -> None
+
 let (|BinaryOp|_|) (x : Expression) =
     match x with
     | Add(e1, e2) -> Some(Add, e1, e2)
@@ -56,8 +65,8 @@ let (|BinaryCondition|_|) (c : Condition) =
 
 let (|CommutativeOp|_|) (x : Expression) =
     match x with
-    | Add(e1, e2) -> Some(Add, "Add", e1, e2)
-    | Mul(e1, e2) -> Some(Mul, "Mul", e1, e2)
+    | Add(e1, e2) -> Some(Add, e1, e2)
+    | Mul(e1, e2) -> Some(Mul, e1, e2)
     | _ -> None
 
 let (|Func|_|) (x : Expression) =
@@ -77,32 +86,37 @@ let (|Linear|_|) (x : Expression) =
 
 let rec (|Constant|_|) (x : Expression) =
     match x with
+    | UnaryOp(op, Constant(c)) -> Some(x)
     | BinaryOp(op, Constant(c1), Constant(c2)) -> Some(x)
     | Const(n) -> Some(x)
     | Neg(Constant(c)) -> Some(x)
     | _ -> None
 
-let IsPrimitive (x : Expression) : bool = 
+let isPrimitive (x : Expression) : bool = 
     match x with
     | Var(v) -> true
     | Const(n) -> true
     | _ -> false
 
+let isEqualBinaryOp op1 op2 : bool = 
+    let c = Const(1.)
+    op1(c, c) = op2(c, c)
+
 let rec Dismantle x = 
     match x with
     | Constant(c) -> c, Const(1.)
     | Mul(Const(n), e) -> 
-        let (n1, e1) = Dismantle e in
+        let (n1, e1) = Dismantle e
         n * n1, e1
     | Mul(e, Const(n)) -> 
-        let (n1, e1) = Dismantle e in
+        let (n1, e1) = Dismantle e
         n * n1, e1
     | Mul(e1, e2) -> 
-        let (n1, y1) = Dismantle e1 in
-        let (n2, y2) = Dismantle e2 in
+        let (n1, y1) = Dismantle e1
+        let (n2, y2) = Dismantle e2
         n1 * n2, y1 * y2
     | Div(e, Const(n)) ->
-        let (m, y) = Dismantle e in
+        let (m, y) = Dismantle e
         m / n, y
     | _ -> Const(1.), x
 
@@ -239,17 +253,17 @@ let Format e : string =
 //-------------------------------------------------------------------------------------------------
 let rec SortImpl x = 
     match x with 
-    | CommutativeOp(op, s, e1, e2) when LargerThan e1 e2 ->
+    | CommutativeOp(op, e1, e2) when LargerThan e1 e2 ->
          op(e2, e1) |> SortImpl
     // add
-    | CommutativeOp(op1, s1, e1, CommutativeOp(op2, s2, e2, e3)) 
-        when LargerThan e1 e2 && s1 = s2 ->
+    | CommutativeOp(op1, e1, CommutativeOp(op2, e2, e3)) 
+        when LargerThan e1 e2 && isEqualBinaryOp op1 op2 ->
         op1(e2, op1(e1, e3)) |> SortImpl
-    | CommutativeOp(op1, s1, CommutativeOp(op2, s2, e1, e2), e3) 
-        when s1 = s2 -> 
+    | CommutativeOp(op1, CommutativeOp(op2, e1, e2), e3) 
+        when isEqualBinaryOp op1 op2 -> 
         op1(e1, op1(e2, e3)) |> SortImpl
-    | CommutativeOp(op, s, CommutativeOp(op1, s1, e1, e2), CommutativeOp(op2, s2, e3, e4)) 
-        when LargerThan e2 e3 && s = s1 && s = s2 -> 
+    | CommutativeOp(op, CommutativeOp(op1, e1, e2), CommutativeOp(op2, e3, e4)) 
+        when LargerThan e2 e3 && isEqualBinaryOp op op1 && isEqualBinaryOp op op2 -> 
         op(op(e1, e3), op(e2, e4)) |> SortImpl
     // subtract
     | Sub(Add(e1, e2), e3) when LargerThan e2 e3 -> Add(Sub(e1, e3), e2) |> SortImpl
@@ -363,12 +377,12 @@ let rec Simplify x =
         | Add(Const(0.), e) -> e |> Expand |> SimplifyImpl true
         | Add(e1, Neg(e2)) -> Sub(e1, e2) |> Expand |> SimplifyImpl true
         | Add(e1, e2) when
-            let (n1, x1) = Dismantle e1 in
-            let (n2, x2) = Dismantle e2 in
+            let (n1, x1) = Dismantle e1
+            let (n2, x2) = Dismantle e2
             x1 = x2
             -> 
-            let (n1, x1) = Dismantle e1 in
-            let (n2, x2) = Dismantle e2 in
+            let (n1, x1) = Dismantle e1
+            let (n2, x2) = Dismantle e2
             (SimplifyConstant (n1 + n2)) * x1 |> Expand |> SimplifyImpl true
         // power
         | Pow(e, Const(1.)) -> e |> SimplifyImpl true
@@ -384,20 +398,20 @@ let rec Simplify x =
         // subtract
         | Sub(e1, e2) when e1 = e2 -> Const(0.)
         | Sub(e1, Neg(e2)) -> Add(e1, e2) |> Expand |> SimplifyImpl true
-        // binary operator
-        | BinaryOp(op, e1, e2) when firstTry -> 
-            let e1 = e1 |> Expand |> SimplifyImpl true in
-            let e2 = e2 |> Expand |> SimplifyImpl true in
-            op(e1, e2) |> Expand |> SimplifyImpl false
-        // change order
-        | Add(e1, Add(e2, e3)) -> ChangeTermOrder Add e1 e2 e3
-        | Mul(e1, Mul(e2, e3)) -> ChangeTermOrder Mul e1 e2 e3
         // divide
         | Div(e1, e2) 
             ->
             let (n1, x1) = Dismantle e1
             let (n2, x2) = Dismantle e2
             (SimplifyConstant n1 / n2) * x1 * (MulnInversed (Factors x2)) |> Expand |> SimplifyImpl true
+        // binary operator
+        | BinaryOp(op, e1, e2) when firstTry -> 
+            let e1 = e1 |> Expand |> SimplifyImpl true
+            let e2 = e2 |> Expand |> SimplifyImpl true
+            op(e1, e2) |> Expand |> SimplifyImpl false
+        // change order
+        | CommutativeOp(op1, e1, CommutativeOp(op2, e2, e3))
+            when isEqualBinaryOp op1 op2 -> ChangeTermOrder op1 e1 e2 e3
         // other
         | _ -> x
     Expand x |> SimplifyImpl true

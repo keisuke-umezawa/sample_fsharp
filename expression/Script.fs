@@ -124,14 +124,6 @@ type ``expression tests`` ()=
    [<Test>] member test.
     ``test case 34`` ()=
            Not(Not(And(ctrue, cfalse))) |> SimplifyCondition |> should equal cfalse
-//Format(Simplify((Const(1.) * x) / Const(2.)))
-//Format(SimplifyConstant(Const(1.) / Const(2.) + Const(3.)))
-//Format(SimplifyConstant(Const(4.) / Const(2.) ))
-//
-//SimplifyConstant(Const(1.) / Const(2.) + Const(3.))
-//let f e =
-//    match e with
-//    | Constant(c) -> c, Const(1.)
-//    | _ -> Const(1.), e
-//
-//printfn "-- end -- "
+   [<Test>] member test.
+    ``test case 35`` ()=
+           Not(Not(And(ctrue, cfalse))) |> SimplifyCondition |> should equal cfalse
