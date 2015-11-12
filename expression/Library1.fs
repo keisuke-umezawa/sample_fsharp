@@ -63,6 +63,12 @@ let (|BinaryCondition|_|) (c : Condition) =
     | Or(c1, c2) -> Some(Or, c1, c2)
     | _ -> None
 
+let (|ComparisonCondition|_|) (c : Condition) =
+    match c with
+    | EqualTo(e1, e2) -> Some(EqualTo, e1, e2)
+    | MoreThan(e1, e2) -> Some(MoreThan, e1, e2)
+    | _ -> None
+
 let (|CommutativeOp|_|) (x : Expression) =
     match x with
     | Add(e1, e2) -> Some(Add, e1, e2)
@@ -399,11 +405,14 @@ let rec Simplify x =
         | Sub(e1, e2) when e1 = e2 -> Const(0.)
         | Sub(e1, Neg(e2)) -> Add(e1, e2) |> Expand |> SimplifyImpl true
         // divide
-        | Div(e1, e2) 
-            ->
+        | Div(e1, e2) ->
             let (n1, x1) = Dismantle e1
             let (n2, x2) = Dismantle e2
             (SimplifyConstant n1 / n2) * x1 * (MulnInversed (Factors x2)) |> Expand |> SimplifyImpl true
+        // divide
+        | When(ConstCondition true, e) -> e |> SimplifyImpl true
+        | When(ConstCondition false, e) -> Const 0.
+        | When(c, e) when firstTry-> When(SimplifyCondition c, Simplify e) |> SimplifyImpl false
         // binary operator
         | BinaryOp(op, e1, e2) when firstTry -> 
             let e1 = e1 |> Expand |> SimplifyImpl true
@@ -422,8 +431,16 @@ and SimplifyCondition (c : Condition)=
     | And(ConstCondition b1, ConstCondition b2) -> ConstCondition(b1 && b2)
     | Or(ConstCondition b1, ConstCondition b2) -> ConstCondition(b1 || b2)
     | EqualTo(e1, e2) when e1 = e2 -> ConstCondition(true)
-    | EqualTo(e1, e2) -> EqualTo(Simplify e1, Simplify e2)
-    | MoreThan(e1, e2) -> MoreThan(Simplify e1, Simplify e2)
+    | EqualTo(Const c1, Const c2) when c1 <> c2 -> ConstCondition(false)
+    | MoreThan(Const c1, Const c2) when c1 > c2 -> ConstCondition(true)
+    | MoreThan(Const c1, Const c2) when c1 <= c2 -> ConstCondition(false)
+    | ComparisonCondition(op, e1, e2) ->
+        let ee1 = Simplify e1
+        let ee2 = Simplify e2
+        if ee1 <> e1 || ee2 <> e2 then
+            op(ee1, ee2) |> SimplifyCondition
+        else
+            op(ee1, ee2)
     | _ -> c
 
 //-------------------------------------------------------------------------------------------------

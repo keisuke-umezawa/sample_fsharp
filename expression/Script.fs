@@ -126,4 +126,31 @@ type ``expression tests`` ()=
            Not(Not(And(ctrue, cfalse))) |> SimplifyCondition |> should equal cfalse
    [<Test>] member test.
     ``test case 35`` ()=
-           Not(Not(And(ctrue, cfalse))) |> SimplifyCondition |> should equal cfalse
+           EqualTo(c1, c1) |> SimplifyCondition |> should equal ctrue
+   [<Test>] member test.
+    ``test case 36`` ()=
+           EqualTo(c1, c2) |> SimplifyCondition |> should equal cfalse
+   [<Test>] member test.
+    ``test case 37`` ()=
+           EqualTo(c1, Div(Mul(c1, c2), c2)) |> SimplifyCondition |> should equal ctrue
+   [<Test>] member test.
+    ``test case 38`` ()=
+           MoreThan(c1, c2) |> SimplifyCondition |> should equal cfalse
+   [<Test>] member test.
+    ``test case 39`` ()=
+           MoreThan(c2, c1) |> SimplifyCondition |> should equal ctrue
+   [<Test>] member test.
+    ``test case 40`` ()=
+           MoreThan(Add(Add(c1, c1), c1), c2) |> SimplifyCondition |> should equal ctrue
+   [<Test>] member test.
+    ``test case 41`` ()=
+           Format(Simplify(When(MoreThan(Add(Add(c1, c1), c1), c2), x))) 
+           |> should equal "x"
+   [<Test>] member test.
+    ``test case 42`` ()=
+           Format(Simplify(When(MoreThan(Add(Add(c1, c1), c1), c2), Div(Add(x, x), x)))) 
+           |> should equal "2.000000"
+   [<Test>] member test.
+    ``test case 43`` ()=
+           Simplify(When(MoreThan(Add(Add(x, c1), c1), c2), Div(Add(x, x), x))) 
+           |> should equal (When(MoreThan(Add(c2, x), c2), c2))
